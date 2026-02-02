@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 
 # Import necessary utilities
 from utils import create_sftp_connection, get_snowflake_connection, list_files
@@ -199,9 +199,9 @@ def sftp_template_pipeline():
 
 
     # --- Task Chaining ---
-    extracted_data, run_date = extract_from_sftp()
-    transformed_data, run_date_transform = transform_data([extracted_data, run_date])
-    loaded_date = load_to_snowflake([transformed_data, run_date_transform])
+    extract_result = extract_from_sftp()
+    transform_result = transform_data(extract_result)
+    loaded_date = load_to_snowflake(transform_result)
     cleanup_staging_files(loaded_date)
 
 # Instantiate the DAG

@@ -1,7 +1,11 @@
+#%%
 import os
 import sys
 import logging
 from datetime import datetime, timedelta
+
+# you may need to install these packages in your environment:
+# pip install git+https://github.com/m0rp43us/openmeteopy
 
 # Add the 'dags' directory to the system path so we can import 'libs'
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dags"))

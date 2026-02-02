@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 
 # Import necessary utilities
 from utils import create_ssh_tunnel, get_mongo_client, get_snowflake_connection
@@ -205,9 +205,9 @@ def mongo_template_pipeline():
             log.warning(f"Staging directory not found for cleanup: {local_dir}")
 
     # --- Task Chaining ---
-    extracted_data, run_date = extract_from_mongo()
-    transformed_data, run_date_transform = transform_data([extracted_data, run_date])
-    loaded_date = load_to_snowflake([transformed_data, run_date_transform])
+    extract_result = extract_from_mongo()
+    transform_result = transform_data(extract_result)
+    loaded_date = load_to_snowflake(transform_result)
     cleanup_staging_area(loaded_date)
 
 

@@ -252,3 +252,9 @@ def read_file_from_sftp(sftp, folder, filename):
     except Exception as e:
         logging.error(f"Error reading {filename}: {e}")
         raise
+
+
+def save_dataframe(df, filepath):
+    """Save a pandas DataFrame to CSV."""
+    df.to_csv(filepath, index=False)
+    logging.info(f"💾 Saved DataFrame to {filepath}")

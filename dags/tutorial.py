@@ -5,7 +5,7 @@
 # Extract → Transform → Quality Check → Load
 # ----------------------------------------------------------------
 
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 from datetime import datetime, timedelta, timezone
 
 # ----------------------------------------------------------------
@@ -72,4 +72,4 @@ def tutorial_etl_dag():
 # ----------------------------------------------------------------
 # DAG Exposure
 # ----------------------------------------------------------------
-dag = tutorial_etl_dag()
+tutorial_etl_dag()

@@ -22,6 +22,7 @@ import logging
 import os
 import shutil
 from datetime import datetime, timedelta
+from snowflake.connector.pandas_tools import write_pandas
 from pathlib import Path
 
 import pandas as pd
@@ -47,8 +48,10 @@ log = logging.getLogger(__name__)
 
 # -- DAG Configuration
 STAGING_AREA = Path("staging/api")
+
+
 PROCESSED_LOG_FILE = STAGING_AREA / "processed_dates.txt"
-SNOWFLAKE_TABLE = "YOUR_WEATHER_TABLE_NAME_HERE"  # TODO: Replace with your target table name
+SNOWFLAKE_TABLE = "WEATHER_API_EVANS_E"  # TODO: Replace with your target table name
 
 # A dictionary of cities and their coordinates for the API call
 CITIES = {
@@ -64,7 +67,7 @@ CITIES = {
     start_date=datetime(2024, 1, 1),
     schedule="@daily",
     catchup=False,
-    tags=["template", "api", "snowflake", "best-practice"],
+    tags=["weather", "template", "api", "snowflake", "best-practice"],
     default_args={
         "owner": "airflow",
         "retries": 1,
@@ -89,7 +92,7 @@ def api_template_pipeline():
         """
         Connects to the API, downloads data for the execution date, and saves it to a staging file.
         """
-        date_str = data_interval_start.strftime('%Y-%m-%d')
+        date_str = (data_interval_start - timedelta(days=1)).strftime('%Y-%m-%d')
         local_dir = STAGING_AREA / date_str
         
         # --- Idempotency Check ---
@@ -150,6 +153,7 @@ def api_template_pipeline():
         """
         Reads the staged data, applies transformations, and returns a DataFrame.
         """
+        
         filepath, date_str = extract_result
         if not filepath:
             log.info("No file path provided. Skipping transformation.")
@@ -157,11 +161,18 @@ def api_template_pipeline():
 
         log.info(f"Transforming data from {filepath}...")
         df = pd.read_csv(filepath)
+        log.info(f"Incoming columns: {df.columns.tolist()}")
+
+
 
         # TODO: Add your data transformation logic here.
         # For example, you could add a unique ID, convert units, or derive new columns.
         # df['temp_range_c'] = df['max_temp'] - df['min_temp']
         # df['load_ts'] = datetime.utcnow()
+        # No-op transform
+        df["date"] = pd.to_datetime(date_str).date()
+        
+
         
         log.info(f"Transformation complete. DataFrame has {len(df)} rows.")
         return df, date_str
@@ -178,7 +189,7 @@ def api_template_pipeline():
             return date_str
 
         log.info(f"Loading {len(df)} rows into Snowflake table: {SNOWFLAKE_TABLE}")
-        # conn = get_snowflake_connection() # TODO: Uncomment when ready
+        conn = get_snowflake_connection() # TODO: Uncomment when ready
         try:
             # TODO: Use conn.cursor() to execute a MERGE statement or `write_pandas`.
             # A MERGE statement is recommended for idempotency.
@@ -187,17 +198,57 @@ def api_template_pipeline():
             # success, _, _, _ = write_pandas(conn, df, SNOWFLAKE_TABLE, auto_create_table=True, overwrite=True)
             # if not success:
             #     raise Exception("Failed to write to Snowflake.")
+    
+            output_path = Path("staging/api/weather_df.csv")
+            df.to_csv(output_path, index=False)
+
+
+        # --- Standardize column names to match Snowflake table ---
+            df = df.rename(columns={
+                "date": "DATE",
+                "city": "CITY",
+                "max_temp": "MAX_TEMP",
+                "min_temp": "MIN_TEMP",
+                "precip": "PRECIP",
+                "max_wind": "MAX_WIND",
+            })
+
+
+            # --- Type casting ---
+            df["MAX_TEMP"] = df["MAX_TEMP"].astype(float)
+            df["MIN_TEMP"] = df["MIN_TEMP"].astype(float)
+            df["PRECIP"] = df["PRECIP"].astype(float)
+            df["MAX_WIND"] = df["MAX_WIND"].astype(float)
+
+            #df["SUNRISE"] = pd.to_datetime(df["SUNRISE"], errors="coerce")
+            #df["SUNSET"] = pd.to_datetime(df["SUNSET"], errors="coerce")
+
+
             
             # --- Log Processed Date on Success ---
             with open(PROCESSED_LOG_FILE, "a") as f:
                 f.write(f"{date_str}\n")
             log.info(f"Successfully loaded data and logged {date_str} as processed.")
+
+            success, nchunks, nrows, _ = write_pandas(
+                conn,
+                df,
+                SNOWFLAKE_TABLE,
+                schema="RAW",
+                database="SNOWBEARAIR_DB",
+                auto_create_table=False,
+                overwrite=False
+            )
         
         except Exception as e:
             log.error(f"Snowflake load failed: {e}")
             raise
         finally:
-            # if conn: conn.close() # TODO: Uncomment when ready
+            if conn: conn.close() # TODO: Uncomment when ready
+            
+
+        if not success:
+            raise Exception("Failed to write data to Snowflake.")
             log.info("Snowflake connection placeholder closed.")
             
         return date_str
@@ -220,9 +271,10 @@ def api_template_pipeline():
 
 
     # --- Task Chaining ---
-    extract_output, run_date = extract_from_api()
-    transform_output, run_date_transform = transform_data([extract_output, run_date])
-    loaded_date = load_to_snowflake([transform_output, run_date_transform])
+    extract_result = extract_from_api()
+    transform_result = transform_data(extract_result)
+    loaded_date = load_to_snowflake(transform_result)
+    cleanup_staging_area(loaded_date)
     cleanup_staging_area(loaded_date)
 
 # Instantiate the DAG

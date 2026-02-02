@@ -82,7 +82,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/test:/opt/airflow/test
     - ${AIRFLOW_PROJ_DIR:-.}/staging:/opt/airflow/staging
     - ./requirements.txt:/requirements.txt  # Mount requirements.txt
-    - /Users/chazclar/.ssh:/Users/chazclar/.ssh:ro  # Mount private key for Snowflake, replace with your path
+    - C:/Users/ethan/.ssh:/Users/ethan/.ssh:ro  # Mount private key for Snowflake, replace with your path
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on

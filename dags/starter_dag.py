@@ -9,19 +9,19 @@ import requests
 import pandas as pd # Import pandas for DataFrame operations
 from snowflake.connector.pandas_tools import write_pandas
 
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 
 # Import utility functions from utils.py (need to ensure it's on the path if not already)
 # This project's setup seems to handle dags/utils.py imports automatically for DAGs.
-from dags.utils import get_snowflake_connection
+from utils import get_snowflake_connection
 
 # -------------------------------------------------------------------
 # Configuration
 # -------------------------------------------------------------------
-ON_OFF_SNOWFLAKE_LOAD_ENABLED = False  # Set to True to enable Snowflake loading
+ON_OFF_SNOWFLAKE_LOAD_ENABLED = True  # Set to True to enable Snowflake loading
 SNOWFLAKE_DATABASE = os.getenv("SNOWFLAKE_DATABASE", "SNOWBEARAIR_DB") # Default to SNOWBEARAIR_DB
 SNOWFLAKE_SCHEMA = os.getenv("SNOWFLAKE_SCHEMA", "RAW") # Default to RAW
-SNOWFLAKE_TABLE = "BORED_API_ACTIVITIES" # Table name for Bored API data
+SNOWFLAKE_TABLE = "STARTER_DAG_EVANS_E" # Table name for Bored API data
 
 @dag(
     dag_id="starter_dag",
@@ -46,9 +46,9 @@ def starter_dag_elt():
     @task
     def extract_activity():
         """
-        Fetches a random activity from the Bored API.
+        Fetches a random activity from the Bored API (community replacement).
         """
-        response = requests.get("https://www.boredapi.com/api/activity", timeout=15)
+        response = requests.get("https://bored-api.appbrewery.com/random", timeout=15)
         response.raise_for_status()  # Raise an exception for bad status codes
         return response.json()
 
@@ -81,6 +81,20 @@ def starter_dag_elt():
         with open(file_path, "r") as f:
             data = json.load(f)
 
+        # Map accessibility string values to numeric (API changed from numeric to string)
+        accessibility_mapping = {
+            "Few to no challenges": 0.0,
+            "Minor challenges": 0.25,
+            "Some challenges": 0.5,
+            "Major challenges": 0.75,
+            "Significant challenges": 1.0,
+        }
+        raw_accessibility = data.get("accessibility")
+        if isinstance(raw_accessibility, str):
+            accessibility_value = accessibility_mapping.get(raw_accessibility, 0.5)
+        else:
+            accessibility_value = raw_accessibility
+
         # Simple transformation: select specific fields and create a DataFrame
         transformed_record = {
             "ACTIVITY_IDEA": data.get("activity"),
@@ -88,7 +102,7 @@ def starter_dag_elt():
             "PARTICIPANTS_NEEDED": data.get("participants"),
             "PRICE": data.get("price"),
             "LINK": data.get("link"),
-            "ACCESSIBILITY": data.get("accessibility"),
+            "ACCESSIBILITY": accessibility_value,
             "UNIQUE_KEY": data.get("key"), # Bored API provides a unique key per activity
             "FETCH_DATE": datetime.now().isoformat() # Add a fetch timestamp
         }
@@ -125,7 +139,7 @@ def starter_dag_elt():
             # This is a basic example; for production, use DDL in version control.
             # Example DDL for your Snowflake table (run this manually in Snowflake once):
             #
-            # CREATE TABLE IF NOT EXISTS SNOWBEARAIR_DB.RAW.BORED_API_ACTIVITIES (
+            # CREATE TABLE IF NOT EXISTS SNOWBEARAIR_DB.RAW.STARTER_DAG_LASTNAME_FI (
             #     ACTIVITY_IDEA VARCHAR,
             #     CATEGORY VARCHAR,
             #     PARTICIPANTS_NEEDED NUMBER(38,0),
@@ -139,7 +153,8 @@ def starter_dag_elt():
             # Adjust data types as needed based on your specific requirements.
 
             success, nchunks, nrows, _ = write_pandas(
-                df,
+                conn=conn,
+                df=df,
                 table_name=SNOWFLAKE_TABLE,
                 database=SNOWFLAKE_DATABASE,
                 schema=SNOWFLAKE_SCHEMA,

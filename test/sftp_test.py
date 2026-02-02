@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import paramiko
 
 # Load env
-load_dotenv("student.env")
+load_dotenv("../.env")
 
 SFTP_HOST = os.getenv("SFTP_HOST")
 SFTP_PORT = int(os.getenv("SFTP_PORT"))

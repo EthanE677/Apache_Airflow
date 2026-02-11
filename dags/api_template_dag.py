@@ -66,7 +66,7 @@ CITIES = {
     dag_id="api_template_dag",
     start_date=datetime(2024, 1, 1),
     schedule="@daily",
-    catchup=False,
+    catchup=True,
     tags=["weather", "template", "api", "snowflake", "best-practice"],
     default_args={
         "owner": "airflow",

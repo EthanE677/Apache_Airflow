@@ -92,8 +92,8 @@ def mongo_template_pipeline():
             mongo_client = get_mongo_client(local_port=tunnel.local_bind_port)
             
             # TODO: Specify your database and collection name
-            db = mongo_client["your_db_name"]
-            collection = db["your_collection_name"]
+            db = mongo_client["stock-data-db"]
+            collection = db["price"]
             log.info(f"Connected to MongoDB collection: {collection.name}")
 
             # --- Define Query ---

@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 # IMPORTANT: These paths are relative to the Airflow project root.
 STAGING_AREA = Path("staging/mongo")
 PROCESSED_LOG_FILE = STAGING_AREA / "processed_dates.txt"
-SNOWFLAKE_TABLE = "YOUR_MONGO_TARGET_TABLE_HERE"  # TODO: Replace with your Snowflake table name
+SNOWFLAKE_TABLE = "STONKS"  # TODO: Replace with your Snowflake table name
 
 
 
@@ -50,7 +50,7 @@ SNOWFLAKE_TABLE = "YOUR_MONGO_TARGET_TABLE_HERE"  # TODO: Replace with your Snow
     default_args={
         "owner": "airflow",
         "retries": 1,
-        "retry_delay": timedelta(minutes=3),
+        "retry_delay": timedelta(minutes=1),
     },
 )
 def mongo_template_pipeline():
@@ -72,8 +72,10 @@ def mongo_template_pipeline():
         Connects to MongoDB via an SSH tunnel, queries for data based on the
         execution date, and saves it to a local staging file.
         """
-        date_str = data_interval_start.strftime('%Y-%m-%d')
+        date_str = (data_interval_start - timedelta(days=90)).strftime('%Y-%m-%d')
         local_dir = STAGING_AREA / date_str
+
+
 
         # --- Idempotency Check ---
         with open(PROCESSED_LOG_FILE, "r") as f:
@@ -98,8 +100,20 @@ def mongo_template_pipeline():
 
             # --- Define Query ---
             # This query finds documents where the 'datetime' field matches the execution day.
-            start_of_day = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            end_of_day = start_of_day + timedelta(days=1)
+            start_of_day = f"{date_str}T00:00:00Z"
+
+            next_date = (
+                datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)
+            ).strftime("%Y-%m-%d")
+
+            end_of_day = f"{next_date}T00:00:00Z"
+
+            query = {
+                "datetime": {
+                    "$gte": start_of_day,
+                    "$lt": end_of_day
+                }
+            }
             
             # TODO: Adjust the query field ('datetime') and logic as needed for your collection.
             query = {"datetime": {"$gte": start_of_day, "$lt": end_of_day}}
@@ -153,6 +167,11 @@ def mongo_template_pipeline():
         # - Convert data types: df['amount'] = pd.to_numeric(df['amount'])
         # - Create a unique hash ID: df['record_id'] = df.apply(lambda row: hash(tuple(row)), axis=1)
 
+        df.columns = (
+            df.columns.str.strip()
+            .str.upper()
+        )
+
         log.info(f"Transformation complete. DataFrame has {len(df)} rows.")
         return df, date_str
 
@@ -167,12 +186,21 @@ def mongo_template_pipeline():
             return date_str
 
         log.info(f"Loading {len(df)} rows into Snowflake table: {SNOWFLAKE_TABLE}")
-        # conn = get_snowflake_connection() # TODO: Uncomment
+        conn = get_snowflake_connection() # TODO: Uncomment
         try:
             # TODO: Use conn.cursor() or write_pandas() to load the DataFrame.
             # A MERGE statement is recommended to prevent duplicates if the DAG is re-run
             # before the date is logged.
-            log.info("Placeholder for Snowflake load logic.")
+            from snowflake.connector.pandas_tools import write_pandas
+
+            success, n_chunks, n_rows, _ = write_pandas(
+                conn, df, SNOWFLAKE_TABLE
+            )
+
+            if not success:
+                raise Exception("write_pandas reported failure")
+
+            log.info(f"Loaded {n_rows} rows into Snowflake")
 
             # --- Log Processed Date on Success ---
             with open(PROCESSED_LOG_FILE, "a") as f:

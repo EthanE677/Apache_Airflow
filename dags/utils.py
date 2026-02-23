@@ -47,6 +47,8 @@ def get_sp500_tickers() -> list[str]:
     )
     return tickers
 
+
+
 # -------------------------------------------------------------------
 # Snowflake_keypair
 # -------------------------------------------------------------------
@@ -99,6 +101,7 @@ def get_snowflake_connection(schema: str = None):
 # MongoDB
 # -------------------------------------------------------------------
 def get_mongo_client(local_port=None):
+    from urllib.parse import quote_plus
     """
     Returns a MongoDB client.
     - If using SSH tunnel, pass tunnel.local_bind_port as local_port.
@@ -109,7 +112,8 @@ def get_mongo_client(local_port=None):
     user = os.getenv("MONGO_USER")
     password = os.getenv("MONGO_PASSWORD")
     auth_db = os.getenv("MONGO_DB", "admin")
-
+    password = quote_plus(password)  # URL-encode the password
+    user = quote_plus(user)
     uri = f"mongodb://{user}:{password}@{host}:{port}/{auth_db}"
     return pymongo.MongoClient(uri)
 

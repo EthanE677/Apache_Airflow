@@ -72,7 +72,7 @@ def mongo_template_pipeline():
         Connects to MongoDB via an SSH tunnel, queries for data based on the
         execution date, and saves it to a local staging file.
         """
-        date_str = (data_interval_start - timedelta(days=90)).strftime('%Y-%m-%d')
+        date_str = (data_interval_start - timedelta(days=7)).strftime('%Y-%m-%d')
         local_dir = STAGING_AREA / date_str
 
 
